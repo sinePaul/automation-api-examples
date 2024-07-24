@@ -4,6 +4,11 @@ using System.Linq;
 using System.Threading.Tasks;
 using Pulumi;
 using Pulumi.Automation;
+using Pulumi.AzureNative;
+using Pulumi.PulumiService;
+using Pulumi.AzureNative.Maintenance;
+using Pulumi.AzureNative.Maintenance.Inputs;
+using Pulumi.AzureNative.Resources;
 
 namespace InlineProgram
 {
@@ -12,111 +17,13 @@ namespace InlineProgram
         static async Task Main(string[] args)
         {
             // define our pulumi program "inline"
-            var program = PulumiFn.Create(() =>
-            {
-                // create a bucket and expose a website index document
-                var siteBucket = new Pulumi.Aws.S3.Bucket(
-                    "s3-website-bucket",
-                    new Pulumi.Aws.S3.BucketArgs
-                    {
-                        Website = new Pulumi.Aws.S3.Inputs.BucketWebsiteArgs
-                        {
-                            IndexDocument = "index.html",
-                        },
-                    });
+            var program = PulumiFn.Create<MyStack>();
 
-                const string indexContent = @"
-<html>
-    <head><titl>Hello S3</title><meta charset=""UTF-8""></head>
-    <body>
-        <p>Hello, world!</p>
-        <p>Made with ❤️ with <a href=""https://pulumi.com"">Pulumi</a></p>
-    </body>
-</html>
-";
-            var bucketOwnership = new Pulumi.Aws.S3.BucketOwnershipControls(
-                "ownership",
-                new Pulumi.Aws.S3.BucketOwnershipControlsArgs
-                {
-                    Bucket = siteBucket.BucketName,
-                    Rule = new Pulumi.Aws.S3.Inputs.BucketOwnershipControlsRuleArgs
-                    {
-                        ObjectOwnership = "ObjectWriter"
-                    }
-                }
-            );
 
-            var bucketPublicAccessBlock = new Pulumi.Aws.S3.BucketPublicAccessBlock(
-                "accessBlock", 
-                new Pulumi.Aws.S3.BucketPublicAccessBlockArgs
-                {
-                    Bucket = siteBucket.BucketName,
-                    BlockPublicAcls = false,
-                });
 
-                // write our index.html into the site bucket
-                var @object = new Pulumi.Aws.S3.BucketObject(
-                    "index",
-                    new Pulumi.Aws.S3.BucketObjectArgs
-                    {
-                        Bucket = siteBucket.BucketName, // reference to the s3 bucket object
-                        Content = indexContent,
-                        Key = "index.html", // set the key of the object
-                        ContentType = "text/html; charset=utf-8", // set the MIME type of the file
-                    });
+            var projectName = "EnvAccessTests";
+            var stackName = "sinequacloud/plopa";
 
-                var bucketPolicyDocument = siteBucket.Arn.Apply(bucketArn =>
-                {
-                    return Output.Create(Pulumi.Aws.Iam.GetPolicyDocument.InvokeAsync(
-                        new Pulumi.Aws.Iam.GetPolicyDocumentArgs
-                        {
-                            Statements = new List<Pulumi.Aws.Iam.Inputs.GetPolicyDocumentStatementArgs>
-                            {
-                                new Pulumi.Aws.Iam.Inputs.GetPolicyDocumentStatementArgs
-                                {
-                                    Effect = "Allow",
-                                    Principals = new List<Pulumi.Aws.Iam.Inputs.GetPolicyDocumentStatementPrincipalArgs>
-                                    {
-                                        new Pulumi.Aws.Iam.Inputs.GetPolicyDocumentStatementPrincipalArgs
-                                        {
-                                            Identifiers = new List<string> { "*" },
-                                            Type = "AWS",
-                                        },
-                                    },
-                                    Actions = new List<string> { "s3:GetObject" },
-                                    Resources = new List<string> { $"{bucketArn}/*" },
-                                },
-                            },
-                        }));
-                });
-
-                // set the access policy for the bucket so all objects are readable
-                new Pulumi.Aws.S3.BucketPolicy(
-                    "bucket-policy",
-                    new Pulumi.Aws.S3.BucketPolicyArgs
-                    {
-                        Bucket = siteBucket.BucketName,
-                        Policy = bucketPolicyDocument.Apply(x => x.Json),
-                    }, new CustomResourceOptions
-                    {
-                        DependsOn = {bucketPublicAccessBlock, bucketOwnership}
-                    });
-
-                // export the website url
-                return new Dictionary<string, object?>
-                {
-                    ["website_url"] = siteBucket.WebsiteEndpoint,
-                };
-            });
-
-            // to destroy our program, we can run "dotnet run destroy"
-            var destroy = args.Any() && args[0] == "destroy";
-
-            var projectName = "inline_s3_project";
-            var stackName = "dev";
-
-            // create or select a stack matching the specified name and project
-            // this will set up a workspace with everything necessary to run our inline program (program)
             var stackArgs = new InlineProgramArgs(projectName, stackName, program);
             var stack = await LocalWorkspace.CreateOrSelectStackAsync(stackArgs);
 
@@ -124,38 +31,63 @@ namespace InlineProgram
 
             // for inline programs, we must manage plugins ourselves
             Console.WriteLine("installing plugins...");
-            await stack.Workspace.InstallPluginAsync("aws", "v5.41.0");
+            await stack.Workspace.InstallPluginAsync("azure-native", typeof(Pulumi.AzureNative.Provider).Assembly.GetName().Version!.GetSemver());
             Console.WriteLine("plugins installed");
 
             // set stack configuration specifying the region to deploy
             Console.WriteLine("setting up config...");
-            await stack.SetConfigAsync("aws:region", new ConfigValue("us-west-2"));
+            await stack.SetConfigAsync("azure-native:location", new ConfigValue("eastus"));
+            await stack.SetConfigAsync("azure-native:subscriptionId", new ConfigValue("c6b97ef5-feda-4672-8f30-593c1f06604d"));
+            //await stack.SetConfigAsync("environment", new ConfigValue($"[\"QA\"]"));
+            //await stack.AddEnvironmentsAsync(new List<string>() { "QA" });
+
+            //stack.Confi
+
+            await stack.SetTagAsync("euwyeuwye", "weiwueiuweiu");
+
+
+            //stack.Workspace.
+
+            //stack.
+
             Console.WriteLine("config set");
 
-            Console.WriteLine("refreshing stack...");
-            await stack.RefreshAsync(new RefreshOptions { OnStandardOutput = Console.WriteLine });
-            Console.WriteLine("refresh complete");
+            //Console.WriteLine("refreshing stack...");
+            //await stack.RefreshAsync(new RefreshOptions { OnStandardOutput = Console.WriteLine });
+            //Console.WriteLine("refresh complete");
 
-            if (destroy)
-            {
-                Console.WriteLine("destroying stack...");
-                await stack.DestroyAsync(new DestroyOptions { OnStandardOutput = Console.WriteLine });
-                Console.WriteLine("stack destroy complete");
-            }
-            else
-            {
-                Console.WriteLine("updating stack...");
-                var result = await stack.UpAsync(new UpOptions { OnStandardOutput = Console.WriteLine });
+            //await stack.DestroyAsync();
+            Console.WriteLine("updating stack...");
+            var result = await stack.UpAsync(new UpOptions { OnStandardOutput = Console.WriteLine });
 
-                if (result.Summary.ResourceChanges != null)
-                {
-                    Console.WriteLine("update summary:");
-                    foreach (var change in result.Summary.ResourceChanges)
-                        Console.WriteLine($"    {change.Key}: {change.Value}");
-                }
 
-                Console.WriteLine($"website url: {result.Outputs["website_url"].Value}");
-            }
+            //stack.State.
+
+
+            //Console.WriteLine("destroying stack...");
+            //await stack.DestroyAsync(new DestroyOptions { OnStandardOutput = Console.WriteLine });
+            //Console.WriteLine("stack destroy complete");
+            //else
+            //{
+
+            //    if (result.Summary.ResourceChanges != null)
+            //    {
+            //        Console.WriteLine("update summary:");
+            //        foreach (var change in result.Summary.ResourceChanges)
+            //            Console.WriteLine($"    {change.Key}: {change.Value}");
+            //    }
+
+            //    Console.WriteLine($"website url: {result.Outputs["website_url"].Value}");
+            //}
         }
     }
+
+    public static class VersionExtensions
+    {
+        public static string GetSemver(this Version version)
+        {
+            return $"{version.Major}.{version.Minor}.{version.Build}";
+        }
+    }
+
 }
